@@ -1,4 +1,9 @@
 string drone_state
+float32 throttle
+float32 yaw
+float32 pitch
+float32 roll
+float64 time
 ---
 string ack
 ---
