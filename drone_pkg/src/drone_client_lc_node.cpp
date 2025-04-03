@@ -65,13 +65,36 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
         RCLCPP_INFO(get_logger(),"on_activate() called");
         RCLCPP_INFO(this->get_logger(),"Last state id: %d, label: %s,",state.id(),state.label().c_str());    
 
-        RCLCPP_INFO(this->get_logger(),"Start controller");
-        geometry_msgs::msg::Twist drone_cmd_vel_msg;
+        RCLCPP_INFO(this->get_logger(),"Start movements");
+        drone_actions::action::TakeoffLanding::Goal goal_msg;
+        goal_msg.drone_state = "move";
+        goal_msg.throttle = 0.2;
+        goal_msg.yaw = 10.0;
+        goal_msg.time = 5.0;
 
-        drone_cmd_vel_msg.linear.x = 0.1;
-        RCLCPP_INFO(this->get_logger(),"Velocity: %.5f",drone_cmd_vel_msg.linear.x);
+        RCLCPP_INFO(this->get_logger(),"Sending Goal");
+        drone_client_->async_send_goal(goal_msg,send_goal_options_);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(6000));
+
+        double t=0.0;
+        while(t<1000)
+        {
+        geometry_msgs::msg::Twist drone_cmd_vel_msg;
+        drone_cmd_vel_msg.linear.x = 0.1+t*0.1;
+        drone_cmd_vel_msg.linear.y = 0.6+t*0.1;
+        drone_cmd_vel_msg.linear.z = 0.3+t*0.1;
+        drone_cmd_vel_msg.angular.z = 0.5+t*0.1;  
+
+        RCLCPP_INFO(this->get_logger(),"Velocity: %.5f,%.5f,%.5f,%.5f",drone_cmd_vel_msg.linear.x,drone_cmd_vel_msg.linear.y,drone_cmd_vel_msg.linear.z,drone_cmd_vel_msg.angular.z);
         
         drone_cmd_vel_pub_->publish(drone_cmd_vel_msg);
+        t+=10;
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+
 
         return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
     }

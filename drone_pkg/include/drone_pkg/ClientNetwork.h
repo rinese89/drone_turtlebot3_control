@@ -21,13 +21,13 @@
 #define TEL_PACKET_CONTROL 27
 
 // port to connect sockets through 
-#define HOST "192.168.0.102"
-#define PORT_CMD "8000"
-#define PORT_TEL "9007"
+//#define HOST "192.168.0.102"
+//#define PORT_CMD "8000"
+//#define PORT_TEL "9007"
 
-//#define HOST "127.0.0.1"
+#define HOST "127.0.0.1"
 //#define PORT_CMD "12345"
-//#define PORT_TEL "12345"
+#define PORT_TEL "12345"
 
 
 
