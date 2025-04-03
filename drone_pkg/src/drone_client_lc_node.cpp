@@ -65,20 +65,6 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
         RCLCPP_INFO(get_logger(),"on_activate() called");
         RCLCPP_INFO(this->get_logger(),"Last state id: %d, label: %s,",state.id(),state.label().c_str());    
 
-        //--------------------- Move ------------------------------
-
-        RCLCPP_INFO(this->get_logger(),"Start movements");
-        drone_actions::action::TakeoffLanding::Goal goal_move_msg;
-        goal_move_msg.drone_state = "move";
-        goal_move_msg.throttle = 0.2;
-        goal_move_msg.yaw = 10.0;
-        goal_move_msg.time = 5.0;
-
-        RCLCPP_INFO(this->get_logger(),"Sending movements Goal");
-        drone_client_->async_send_goal(goal_move_msg,send_goal_options_);
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(10000));
-
         //--------------------- Control ------------------------------
 
         drone_actions::action::TakeoffLanding::Goal goal_control_msg;
