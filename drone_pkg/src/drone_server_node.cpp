@@ -105,6 +105,11 @@ class DroneServer : public rclcpp::Node{
             RCLCPP_INFO(this->get_logger(),"Prepare to start control trajectory");
            return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;       
         }
+        else if(goal->drone_state=="control"){
+            RCLCPP_INFO(this->get_logger(),"Goal Accepted");
+            RCLCPP_INFO(this->get_logger(),"Prepare to start control trajectory");
+           return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;       
+        }
         else
         RCLCPP_INFO(this->get_logger(),"Does not a correct goal -> rejected");
         return rclcpp_action::GoalResponse::REJECT;
@@ -134,6 +139,9 @@ class DroneServer : public rclcpp::Node{
         }
         else if(goal->drone_state == "move"){
             std::thread{std::bind(&DroneServer::execute_movements,this,std::placeholders::_1),goal_handle}.detach();
+        }
+        else if(goal->drone_state == "control"){
+            std::thread{std::bind(&DroneServer::execute_control,this,std::placeholders::_1),goal_handle}.detach();
         }
         else
             RCLCPP_INFO(this->get_logger(),"Goal error");    
@@ -205,8 +213,8 @@ class DroneServer : public rclcpp::Node{
                 t = time.seconds()-init_time.seconds();
                 feedback->altitude = altitude_;
 
-                RCLCPP_INFO(this->get_logger(),"Altitude in control: %.5f",altitude_);
-                
+                RCLCPP_INFO(this->get_logger(),"Altitude in movements: %.5f",altitude_);
+                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
                 goal_handle->publish_feedback(feedback);
             }
             result->ack = "Move succeed";
@@ -225,6 +233,9 @@ class DroneServer : public rclcpp::Node{
         if(goal->drone_state=="control")
         {
             drone_commands_callback_flag_ = true;
+
+            feedback->altitude = altitude_;
+            goal_handle->publish_feedback(feedback);
         }
 
     }
@@ -302,6 +313,8 @@ class DroneServer : public rclcpp::Node{
     void sendCmd(char* com, float throttle, float yaw, float pitch, float roll)
     {
         RCLCPP_INFO(this->get_logger(),"Commad: %s -> Throttle: %.5f, Yaw: %.5f, Pitch: %.5f, Roll: %.5f",com,throttle,yaw,pitch,roll);
+        altitude_+=0.1;
+        yaw_+=0.2;
     }
 
     void security_control()
@@ -325,8 +338,7 @@ class DroneServer : public rclcpp::Node{
             sendCmd((char*)"CONTROL", drone_cmd_vel_msg->linear.z, drone_cmd_vel_msg->linear.x,
                                     drone_cmd_vel_msg->linear.y, drone_cmd_vel_msg->linear.z); // Throttle, Yaw, Pitch, Roll
                                     
-            RCLCPP_INFO(this->get_logger(),"Drone_cmd_vel_callback: %s -> Throttle: %.5f, Yaw: %.5f, Pitch: %.5f, Roll: %.5f",
-                                    com,drone_cmd_vel_msg->linear.z,drone_cmd_vel_msg->linear.x,drone_cmd_vel_msg->linear.y,drone_cmd_vel_msg->angular.z);
+            RCLCPP_INFO(this->get_logger(),"Drone_cmd_vel_callback: Throttle: %.5f, Yaw: %.5f, Pitch: %.5f, Roll: %.5f",drone_cmd_vel_msg->linear.z,drone_cmd_vel_msg->linear.x,drone_cmd_vel_msg->linear.y,drone_cmd_vel_msg->angular.z);
         }
     }
 

@@ -65,20 +65,29 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
         RCLCPP_INFO(get_logger(),"on_activate() called");
         RCLCPP_INFO(this->get_logger(),"Last state id: %d, label: %s,",state.id(),state.label().c_str());    
 
+        //--------------------- Move ------------------------------
+
         RCLCPP_INFO(this->get_logger(),"Start movements");
-        drone_actions::action::TakeoffLanding::Goal goal_msg;
-        goal_msg.drone_state = "move";
-        goal_msg.throttle = 0.2;
-        goal_msg.yaw = 10.0;
-        goal_msg.time = 5.0;
+        drone_actions::action::TakeoffLanding::Goal goal_move_msg;
+        goal_move_msg.drone_state = "move";
+        goal_move_msg.throttle = 0.2;
+        goal_move_msg.yaw = 10.0;
+        goal_move_msg.time = 5.0;
 
+        RCLCPP_INFO(this->get_logger(),"Sending movements Goal");
+        drone_client_->async_send_goal(goal_move_msg,send_goal_options_);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(10000));
+
+        //--------------------- Control ------------------------------
+
+        drone_actions::action::TakeoffLanding::Goal goal_control_msg;
+        goal_control_msg.drone_state = "control";
         RCLCPP_INFO(this->get_logger(),"Sending Goal");
-        drone_client_->async_send_goal(goal_msg,send_goal_options_);
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(6000));
+        drone_client_->async_send_goal(goal_move_msg,send_goal_options_);
 
         double t=0.0;
-        while(t<1000)
+        while(t<10)
         {
         geometry_msgs::msg::Twist drone_cmd_vel_msg;
         drone_cmd_vel_msg.linear.x = 0.1+t*0.1;
@@ -89,8 +98,8 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
         RCLCPP_INFO(this->get_logger(),"Velocity: %.5f,%.5f,%.5f,%.5f",drone_cmd_vel_msg.linear.x,drone_cmd_vel_msg.linear.y,drone_cmd_vel_msg.linear.z,drone_cmd_vel_msg.angular.z);
         
         drone_cmd_vel_pub_->publish(drone_cmd_vel_msg);
-        t+=10;
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        t+=1;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(5000));
@@ -194,12 +203,14 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
 
     void feedback_callback(rclcpp_action::ClientGoalHandle<drone_actions::action::TakeoffLanding>::SharedPtr goal_handle, const std::shared_ptr<const drone_actions::action::TakeoffLanding::Feedback> feedback){
 
-        if((feedback->altitude > 1.5) && (goal_active_)){
+        if((feedback->altitude > 10.0) && (goal_active_)){
             RCLCPP_INFO(this->get_logger(),"Cancel from feedback_callback");
             cancel_goal_th_ = std::thread(&DroneClient::cancel_a_goal,this,goal_handle);
             cancel_goal_th_.detach();
         }
-        //RCLCPP_INFO(this->get_logger(),"Altitude: %.5f", feedback->altitude);
+
+        RCLCPP_INFO(this->get_logger(),"Altitude from feedback: %.5f", feedback->altitude);
+        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
     }
 
     void result_callback(const rclcpp_action::ClientGoalHandle<drone_actions::action::TakeoffLanding>::WrappedResult & result){
