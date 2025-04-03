@@ -26,9 +26,7 @@ endif()
 find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "action/Gimbal.action"
   "action/TakeoffLanding.action"
-  "action/StartStopControl.action"
 )
 
 ament_package()

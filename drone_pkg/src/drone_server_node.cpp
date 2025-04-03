@@ -68,7 +68,6 @@ class DroneServer : public rclcpp::Node{
         security_th_ = std::thread(&DroneServer::security_control,this);
         security_th_.detach();
 
-        state_=2;
         altitude_ = 0.0;
         yaw_=0.0;
 
@@ -100,7 +99,7 @@ class DroneServer : public rclcpp::Node{
             RCLCPP_INFO(this->get_logger(),"Prepare to landing");
             return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;       
          }
-        else if(goal->drone_state=="move"){
+        else if(goal->drone_state=="demo"){
             RCLCPP_INFO(this->get_logger(),"Goal Accepted");
             RCLCPP_INFO(this->get_logger(),"Prepare to start control trajectory");
            return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;       
@@ -137,8 +136,8 @@ class DroneServer : public rclcpp::Node{
         else if(goal->drone_state == "stop"){
             std::thread{std::bind(&DroneServer::execute_landing,this,std::placeholders::_1),goal_handle}.detach();
         }
-        else if(goal->drone_state == "move"){
-            std::thread{std::bind(&DroneServer::execute_movements,this,std::placeholders::_1),goal_handle}.detach();
+        else if(goal->drone_state == "demo"){
+            std::thread{std::bind(&DroneServer::execute_demo,this,std::placeholders::_1),goal_handle}.detach();
         }
         else if(goal->drone_state == "control"){
             std::thread{std::bind(&DroneServer::execute_control,this,std::placeholders::_1),goal_handle}.detach();
@@ -160,7 +159,8 @@ class DroneServer : public rclcpp::Node{
             sendCmd((char*)"TAKEOFF",0,0,0,0);
             RCLCPP_INFO(this->get_logger(),"Drone taking off");
             //std::this_thread::sleep_for(std::chrono::milliseconds(5000));
-            while(altitude_<1.0){
+            while(altitude_<1.0)
+            {
                 feedback->altitude = altitude_;
                 goal_handle->publish_feedback(feedback);
             }
@@ -178,12 +178,13 @@ class DroneServer : public rclcpp::Node{
 
         RCLCPP_INFO(this->get_logger(),"Goal receive in landing function: %s", goal->drone_state.c_str());
         
-        if(goal->drone_state=="stop"){
-
+        if(goal->drone_state=="stop")
+        {
             sendCmd((char*)"LANDING",0,0,0,0);
             RCLCPP_INFO(this->get_logger(),"Drone landing");
             //std::this_thread::sleep_for(std::chrono::milliseconds(5000));
-            while(altitude_>0.0){
+            while(altitude_>0.0)
+            {
                 feedback->altitude = altitude_;
                 goal_handle->publish_feedback(feedback);
             }
@@ -193,15 +194,15 @@ class DroneServer : public rclcpp::Node{
         }
     }
 
-    void execute_movements(const std::shared_ptr<rclcpp_action::ServerGoalHandle<drone_actions::action::TakeoffLanding>> goal_handle){
+    void execute_demo(const std::shared_ptr<rclcpp_action::ServerGoalHandle<drone_actions::action::TakeoffLanding>> goal_handle){
         
         const auto goal = goal_handle->get_goal();
         auto result = std::make_shared<drone_actions::action::TakeoffLanding::Result>();
         auto feedback = std::make_shared<drone_actions::action::TakeoffLanding::Feedback>();
 
         RCLCPP_INFO(this->get_logger(),"Goal receive in execute movements function: %s", goal->drone_state.c_str());
-        if(goal->drone_state=="move"){
-
+        if(goal->drone_state=="demo")
+        {
             sendCmd((char*)"CONTROL", goal->throttle, goal->yaw, goal->pitch, goal->roll); // Throttle, Yaw, Pitch, Roll
             rclcpp::Time init_time = this->get_clock()->now();
             rclcpp::Time time;
@@ -211,13 +212,19 @@ class DroneServer : public rclcpp::Node{
             {
                 time=this->get_clock()->now();
                 t = time.seconds()-init_time.seconds();
+                feedback->throttle = throttle_;
+                feedback->yaw = yaw_;
+                feedback->pitch = pitch_;
+                feedback->roll = roll_;
                 feedback->altitude = altitude_;
 
-                RCLCPP_INFO(this->get_logger(),"Altitude in movements: %.5f",altitude_);
+                sendCmd((char*)"CONTROL", ((goal->throttle)*t), goal->yaw, goal->pitch, goal->roll);
+
+                RCLCPP_INFO(this->get_logger(),"Altitude in Demo: %.5f",altitude_);
                 std::this_thread::sleep_for(std::chrono::milliseconds(1000));
                 goal_handle->publish_feedback(feedback);
             }
-            result->ack = "Move succeed";
+            result->ack = "Demo succeed";
             goal_handle->succeed(result);
             sendCmd((char*)"CONTROL",0,0,0,0);
         }   
@@ -321,13 +328,13 @@ class DroneServer : public rclcpp::Node{
     {
         while(rclcpp::ok()){
 
-            if(altitude_>1.5 && state_==1){
+            if(altitude_>1.5){
                 RCLCPP_INFO(this->get_logger(),"Be careful, MAX altitude exceeded");
             }
-            else if(altitude_< 0.1 && state_==0){
+            else if(altitude_< -0.0){
                 RCLCPP_INFO(this->get_logger(),"Be careful, MIN altitude exceeded");
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
         }
     }   
     
@@ -348,9 +355,7 @@ class DroneServer : public rclcpp::Node{
 
     std::thread telemetry_buffer_th_;
     std::thread security_th_;
-    float altitude_;
-    float yaw_;
-    int state_;
+    float altitude_,yaw_,roll_,pitch_,throttle_;
     bool drone_commands_callback_flag_ = false;
 };
 

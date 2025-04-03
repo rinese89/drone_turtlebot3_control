@@ -53,8 +53,12 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
             RCLCPP_WARN(this->get_logger(), "Trying to connect, waiting Drone_Server to be activated");
         }
 
-        send_goal_th_ = std::thread(&DroneClient::send_a_goal,this);
-        send_goal_th_.detach();
+        drone_actions::action::TakeoffLanding::Goal goal_msg;
+        goal_msg.drone_state = "start";
+
+        RCLCPP_INFO(this->get_logger(),"Ready to send TAKE OFF Goal");
+        std::thread{std::bind(&DroneClient::send_a_goal,this,std::placeholders::_1),goal_msg}.detach();
+
         
         return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
     }
@@ -65,17 +69,18 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
         RCLCPP_INFO(get_logger(),"on_activate() called");
         RCLCPP_INFO(this->get_logger(),"Last state id: %d, label: %s,",state.id(),state.label().c_str());    
 
-        //--------------------- Move ------------------------------
+        //--------------------- Demo ------------------------------
 
-        RCLCPP_INFO(this->get_logger(),"Start movements");
-        drone_actions::action::TakeoffLanding::Goal goal_move_msg;
-        goal_move_msg.drone_state = "move";
-        goal_move_msg.throttle = 0.2;
-        goal_move_msg.yaw = 10.0;
-        goal_move_msg.time = 5.0;
+        RCLCPP_INFO(this->get_logger(),"Start DEMO");
 
-        RCLCPP_INFO(this->get_logger(),"Sending movements Goal");
-        drone_client_->async_send_goal(goal_move_msg,send_goal_options_);
+        drone_actions::action::TakeoffLanding::Goal goal_demo_msg;
+        goal_demo_msg.drone_state = "demo";
+        goal_demo_msg.throttle = 0.2;
+        goal_demo_msg.yaw = 10.0;
+        goal_demo_msg.time = 5.0;
+
+        RCLCPP_INFO(this->get_logger(),"Ready to send DEMO Goal");
+        std::thread{std::bind(&DroneClient::send_a_goal,this,std::placeholders::_1),goal_demo_msg}.detach();
 
         std::this_thread::sleep_for(std::chrono::milliseconds(10000));
 
@@ -83,8 +88,9 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
 
         drone_actions::action::TakeoffLanding::Goal goal_control_msg;
         goal_control_msg.drone_state = "control";
-        RCLCPP_INFO(this->get_logger(),"Sending Goal");
-        drone_client_->async_send_goal(goal_move_msg,send_goal_options_);
+
+        RCLCPP_INFO(this->get_logger(),"Ready to send CONTROL Goal");
+        std::thread{std::bind(&DroneClient::send_a_goal,this,std::placeholders::_1),goal_control_msg}.detach();
 
         double t=0.0;
         while(t<10)
@@ -145,19 +151,18 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
     void telemetry_callback(const drone_msgs::msg::DroneTelemetry::SharedPtr telemetry_msg){
 
         double time_drone = telemetry_msg->header.stamp.sec + telemetry_msg->header.stamp.nanosec*1e-9;
-        double xp_drone = telemetry_msg->velocity.linear.x;
-        double yp_drone = telemetry_msg->velocity.linear.y;
-        double zp_drone = telemetry_msg->velocity.linear.z;
-        double thetap_drone = telemetry_msg->velocity.angular.z;
+        xp_drone_ = telemetry_msg->velocity.linear.x;
+        yp_drone_ = telemetry_msg->velocity.linear.y;
+        zp_drone_ = telemetry_msg->velocity.linear.z;
+        thetap_drone_ = telemetry_msg->velocity.angular.z;
         geometry_msgs::msg::Quaternion q_msg = telemetry_msg->orientation;
 
         tf2::Quaternion q_drone;
         tf2::fromMsg(q_msg,q_drone);
         tf2::Matrix3x3 m(q_drone);
-        double roll,pitch,yaw;
-        m.getRPY(roll,pitch,yaw);
+        m.getRPY(roll_,pitch_,yaw_);
 
-        RCLCPP_DEBUG(this->get_logger(),"Telemetry: Time: %.5f, x_vel: %.5f, y_vel: %.5f, z_vel: %.5f, theta_vel: %.5f,roll: %.5f, pitch: %.5f, yaw: %.5f",time_drone,xp_drone,yp_drone,zp_drone,thetap_drone,roll,pitch,yaw);
+        RCLCPP_DEBUG(this->get_logger(),"Telemetry: Time: %.5f, x_vel: %.5f, y_vel: %.5f, z_vel: %.5f, theta_vel: %.5f,roll: %.5f, pitch: %.5f, yaw: %.5f",time_drone,xp_drone_,yp_drone_,zp_drone_,thetap_drone_,roll_,pitch_,yaw_);
     }
 
     //------------------------- Handle Server Response --------------------------------------------------
@@ -203,14 +208,14 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
 
     void feedback_callback(rclcpp_action::ClientGoalHandle<drone_actions::action::TakeoffLanding>::SharedPtr goal_handle, const std::shared_ptr<const drone_actions::action::TakeoffLanding::Feedback> feedback){
 
-        if((feedback->altitude > 10.0) && (goal_active_)){
+        if((feedback->altitude > 1.2) && (goal_active_)){
             RCLCPP_INFO(this->get_logger(),"Cancel from feedback_callback");
             cancel_goal_th_ = std::thread(&DroneClient::cancel_a_goal,this,goal_handle);
             cancel_goal_th_.detach();
         }
 
         RCLCPP_INFO(this->get_logger(),"Altitude from feedback: %.5f", feedback->altitude);
-        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
 
     void result_callback(const rclcpp_action::ClientGoalHandle<drone_actions::action::TakeoffLanding>::WrappedResult & result){
@@ -220,9 +225,8 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
 
     // ----------------------- Handle Goal Client --------------------------------------------------------
 
-    void send_a_goal(){
-        drone_actions::action::TakeoffLanding::Goal goal_msg;
-        goal_msg.drone_state = "start";
+    void send_a_goal(drone_actions::action::TakeoffLanding::Goal goal_msg){
+        
         RCLCPP_INFO(this->get_logger(),"Sending Goal");
         drone_client_->async_send_goal(goal_msg,send_goal_options_);
         goal_active_=true;
@@ -250,12 +254,11 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr drone_cmd_vel_pub_;
     rclcpp::Subscription<drone_msgs::msg::DroneTelemetry>::SharedPtr drone_telemetry_sub_;
 
-    //rclcpp_action::ClientGoalHandle<drone_msgs::msg::DroneTelemetry>::SharedPtr goal_handle1_;
-
-    std::thread send_goal_th_;
     std::thread cancel_goal_th_;
 
     bool goal_active_;
+    double roll_,pitch_,yaw_;
+    double xp_drone_, yp_drone_, zp_drone_, thetap_drone_;
 
 };
 
