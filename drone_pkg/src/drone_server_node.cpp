@@ -150,14 +150,38 @@ class DroneServer : public rclcpp::Node{
         {
             sendCmd((char*)"TAKEOFF",0,0,0,0);
             RCLCPP_INFO(this->get_logger(),"Drone taking off");
-            //std::this_thread::sleep_for(std::chrono::milliseconds(5000));
-            while(altitude_<1.0){
+
+            while(altitude_<1.0 && !goal_handle->is_canceling())
+            {
                 feedback->altitude = altitude_;
                 goal_handle->publish_feedback(feedback);
             }
-            RCLCPP_INFO(this->get_logger(),"Drone took off");
-            result->ack = "Take off succeed";
-            goal_handle->succeed(result);
+
+            RCLCPP_INFO(this->get_logger(),"Still in function EXECUTE");
+
+
+            if(goal_handle->is_active()){
+                RCLCPP_INFO(this->get_logger(),"Still active");
+            }
+
+            if(goal_handle->is_canceling())
+            {   
+                result->ack="Take off canceled";
+                goal_handle->canceled(result);
+            }
+            else
+            {
+                result->ack = "Take off succeed";
+                goal_handle->succeed(result);
+                RCLCPP_INFO(this->get_logger(),"Drone took off");
+            }
+
+            if(goal_handle->is_active()){
+                RCLCPP_INFO(this->get_logger(),"Still active .....");
+            }
+
+            RCLCPP_INFO(this->get_logger(),"Finish function");
+
             is_taking_off_=false;
         }
     }
@@ -173,16 +197,36 @@ class DroneServer : public rclcpp::Node{
         is_landing_=true;
         if(goal->drone_state=="stop"){
 
+            sendCmd((char*)"CONTROL",0,0,0,0);
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
             sendCmd((char*)"LANDING",0,0,0,0);
             RCLCPP_INFO(this->get_logger(),"Drone landing");
-            //std::this_thread::sleep_for(std::chrono::milliseconds(5000));
-            while(altitude_>0.0){
+            while(altitude_>0.0 && !goal_handle->is_canceling())
+            {
                 feedback->altitude = altitude_;
                 goal_handle->publish_feedback(feedback);
             }
-            RCLCPP_INFO(this->get_logger(),"Drone landed");
-            result->ack = "Landed succeed";
-            goal_handle->succeed(result);
+
+            if(goal_handle->is_active()){
+                RCLCPP_INFO(this->get_logger(),"Still active");
+            }
+
+            if(goal_handle->is_canceling())
+            {   
+                result->ack="Landed canceled";
+                goal_handle->canceled(result);
+            }
+            else
+            {
+                result->ack = "Landed succeed";
+                goal_handle->succeed(result);
+                RCLCPP_INFO(this->get_logger(),"Drone landed");
+            }
+
+            if(goal_handle->is_active()){
+                RCLCPP_INFO(this->get_logger(),"Still active .....");
+            }
+            
             is_taking_off_=true;
             is_landing_ = false;
         }
@@ -199,12 +243,23 @@ class DroneServer : public rclcpp::Node{
         {
             drone_commands_callback_flag_ = true;
 
-            while(goal_handle->is_activate())
+            while(goal_handle->is_active() && !danger_flag_)
             {
                 feedback->altitude = altitude_;
                 goal_handle->publish_feedback(feedback);
             }
-            
+            if(goal_handle->is_canceling())
+            {   
+                result->ack="Control goal canceled";
+                goal_handle->canceled(result);
+            }
+            else
+            {
+                result->ack="Control goal succeed";
+                goal_handle->succeed(result);
+            }
+
+            drone_commands_callback_flag_ = false;
         }
 
     }
@@ -275,19 +330,28 @@ class DroneServer : public rclcpp::Node{
     {
         while(rclcpp::ok()){
 
-            if(altitude_>1.5){
+            if(altitude_>1.2 && altitude_<=1.5){
                 RCLCPP_INFO(this->get_logger(),"Be careful, MAX altitude exceeded: %.5f",altitude_);
             }
             else if(altitude_< 0.1 && !is_taking_off_ && !is_landing_){
                 RCLCPP_INFO(this->get_logger(),"Be careful, MIN altitude exceeded: %.5f",altitude_);
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            else if(altitude_>1.5){
+                RCLCPP_INFO(this->get_logger(),"CANCEL GOALS: MAX altitude dangerous: %.5f",altitude_);
+                danger_flag_=true;
+                sendCmd((char*)"CONTROL",0,0,0,0);
+                sendCmd((char*)"LANDING",0,0,0,0);
+            }
+            else
+                danger_flag_=false;
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
         }
     }   
     
     void drone_cmd_vel_callback(const std::shared_ptr<geometry_msgs::msg::Twist> drone_cmd_vel_msg){
 
-        if (drone_commands_callback_flag_){
+        if (drone_commands_callback_flag_ && !danger_flag_){
             
             sendCmd((char*)"CONTROL", drone_cmd_vel_msg->linear.z, drone_cmd_vel_msg->linear.x,
                                     drone_cmd_vel_msg->linear.y, drone_cmd_vel_msg->linear.z); // Throttle, Yaw, Pitch, Roll
@@ -307,6 +371,7 @@ class DroneServer : public rclcpp::Node{
     bool drone_commands_callback_flag_ = false;
     bool is_landing_ = false;
     bool is_taking_off_ = true;
+    bool danger_flag_ = false;
 };
 
 
