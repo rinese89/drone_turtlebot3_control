@@ -158,6 +158,7 @@ class DroneServer : public rclcpp::Node{
             RCLCPP_INFO(this->get_logger(),"Drone took off");
             result->ack = "Take off succeed";
             goal_handle->succeed(result);
+            is_taking_off_=false;
         }
     }
 
@@ -169,6 +170,7 @@ class DroneServer : public rclcpp::Node{
 
         RCLCPP_INFO(this->get_logger(),"Goal receive in landing function: %s", goal->drone_state.c_str());
         
+        is_landing_=true;
         if(goal->drone_state=="stop"){
 
             sendCmd((char*)"LANDING",0,0,0,0);
@@ -181,6 +183,8 @@ class DroneServer : public rclcpp::Node{
             RCLCPP_INFO(this->get_logger(),"Drone landed");
             result->ack = "Landed succeed";
             goal_handle->succeed(result);
+            is_taking_off_=true;
+            is_landing_ = false;
         }
     }
 
@@ -195,8 +199,12 @@ class DroneServer : public rclcpp::Node{
         {
             drone_commands_callback_flag_ = true;
 
-            feedback->altitude = altitude_;
-            goal_handle->publish_feedback(feedback);
+            while(goal_handle->is_activate())
+            {
+                feedback->altitude = altitude_;
+                goal_handle->publish_feedback(feedback);
+            }
+            
         }
 
     }
@@ -223,59 +231,44 @@ class DroneServer : public rclcpp::Node{
 
         while(rclcpp::ok())
         {
-            
             char receiveMessage[MAX];
-            char receiveMessage1[MAX];
 
             memset(receiveMessage, 0, MAX);
+            recv(clientSocket, receiveMessage, MAX, 0);
 
-            int rMsgSize = recv(clientSocket, receiveMessage, MAX, 0);
-            if (rMsgSize < 0) {
-                std::cerr << "Packet receive failed." << std::endl;
-                break;
-            } else if (rMsgSize == 0) {
-                std::cout << "Server is off." << std::endl;
-                break;
-            }
-            receiveMessage1[0] = receiveMessage[0];
-            std::cout << "Server: " << receiveMessage << std::flush;
-
-            if(receiveMessage1[0]=='u')
+            if(receiveMessage[0]=='u')
             {
-                RCLCPP_INFO(this->get_logger(),"%s",receiveMessage1);
+                RCLCPP_INFO(this->get_logger(),"Rising");
                 altitude_+=0.1;
                 telemetry_msg.altitude = altitude_;
             }
-            else if(receiveMessage1[0]=='d')
+            else if(receiveMessage[0]=='d')
             {
-                RCLCPP_INFO(this->get_logger(),"%s",receiveMessage1);
+                RCLCPP_INFO(this->get_logger(),"Descending");
                 altitude_-=0.1;
                 telemetry_msg.altitude = altitude_;
             }
 
-            else if(receiveMessage1[0]=='y')
+            else if(receiveMessage[0]=='y')
             {
-                RCLCPP_INFO(this->get_logger(),"%s",receiveMessage1);
+                RCLCPP_INFO(this->get_logger(),"Rotating R");
                 yaw_+=0.1;
                 telemetry_msg.orientation.z = yaw_; 
 
             }
-            else if(receiveMessage1[0]=='i')
+            else if(receiveMessage[0]=='i')
             {
-                RCLCPP_INFO(this->get_logger(),"%s",receiveMessage1);
+                RCLCPP_INFO(this->get_logger(),"Rotating L");
                 yaw_-=0.1;
                 telemetry_msg.orientation.z = yaw_; 
             }
-            
             drone_telemetry_pub_->publish(telemetry_msg);
         }
     }
 
     void sendCmd(char* com, float throttle, float yaw, float pitch, float roll)
     {
-        RCLCPP_INFO(this->get_logger(),"Commad: %s -> Throttle: %.5f, Yaw: %.5f, Pitch: %.5f, Roll: %.5f",com,throttle,yaw,pitch,roll);
-        altitude_+=0.1;
-        yaw_+=0.2;
+        RCLCPP_INFO(this->get_logger(),"COMMAND: %s -> Throttle: %.5f, Yaw: %.5f, Pitch: %.5f, Roll: %.5f",com,throttle,yaw,pitch,roll);
     }
 
     void security_control()
@@ -283,10 +276,10 @@ class DroneServer : public rclcpp::Node{
         while(rclcpp::ok()){
 
             if(altitude_>1.5){
-                RCLCPP_INFO(this->get_logger(),"Be careful, MAX altitude exceeded");
+                RCLCPP_INFO(this->get_logger(),"Be careful, MAX altitude exceeded: %.5f",altitude_);
             }
-            else if(altitude_< 0.1){
-                RCLCPP_INFO(this->get_logger(),"Be careful, MIN altitude exceeded");
+            else if(altitude_< 0.1 && !is_taking_off_ && !is_landing_){
+                RCLCPP_INFO(this->get_logger(),"Be careful, MIN altitude exceeded: %.5f",altitude_);
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         }
@@ -312,6 +305,8 @@ class DroneServer : public rclcpp::Node{
     float altitude_;
     float yaw_;
     bool drone_commands_callback_flag_ = false;
+    bool is_landing_ = false;
+    bool is_taking_off_ = true;
 };
 
 
