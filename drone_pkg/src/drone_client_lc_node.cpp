@@ -68,7 +68,7 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
         //--------------------- Control ------------------------------
 
         drone_actions::action::TakeoffLanding::Goal goal_control_msg;
-        goal_control_msg.drone_state = "control";
+        goal_control_msg.drone_state = "start_control";
         RCLCPP_INFO(this->get_logger(),"Sending Goal");
         drone_client_->async_send_goal(goal_move_msg,send_goal_options_);
 

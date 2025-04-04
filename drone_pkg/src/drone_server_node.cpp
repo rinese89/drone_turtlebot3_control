@@ -45,7 +45,7 @@ class DroneServer : public rclcpp::Node{
 
     public: DroneServer() : Node("drone_server_node"){
 
-        RCLCPP_INFO(this->get_logger(),"To takeoff: 'start' - To land: 'stop' - To Demo: 'demo' - To Control: 'control'");
+        RCLCPP_INFO(this->get_logger(),"To takeoff: 'start' - To land: 'stop' - To Demo: 'demo' - To Control: 'start_control'");
 
         // Important: create first the publisher before create the thread
 
@@ -99,9 +99,9 @@ class DroneServer : public rclcpp::Node{
             RCLCPP_INFO(this->get_logger(),"Prepare to landing");
             return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;       
          }
-        else if(goal->drone_state=="control"){
+        else if(goal->drone_state=="start_control"){
             RCLCPP_INFO(this->get_logger(),"Goal Accepted");
-            RCLCPP_INFO(this->get_logger(),"Prepare to start control trajectory");
+            RCLCPP_INFO(this->get_logger(),"Prepare to start start_control trajectory");
            return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;       
         }
         else
@@ -131,7 +131,7 @@ class DroneServer : public rclcpp::Node{
         else if(goal->drone_state == "stop"){
             std::thread{std::bind(&DroneServer::execute_landing,this,std::placeholders::_1),goal_handle}.detach();
         }
-        else if(goal->drone_state == "control"){
+        else if(goal->drone_state == "start_control"){
             std::thread{std::bind(&DroneServer::execute_control,this,std::placeholders::_1),goal_handle}.detach();
         }
         else
@@ -190,8 +190,8 @@ class DroneServer : public rclcpp::Node{
         auto result = std::make_shared<drone_actions::action::TakeoffLanding::Result>();
         auto feedback = std::make_shared<drone_actions::action::TakeoffLanding::Feedback>();
 
-        RCLCPP_INFO(this->get_logger(),"Goal receive in execute control function: %s", goal->drone_state.c_str());
-        if(goal->drone_state=="control")
+        RCLCPP_INFO(this->get_logger(),"Goal receive in execute start_control function: %s", goal->drone_state.c_str());
+        if(goal->drone_state=="start_control")
         {
             drone_commands_callback_flag_ = true;
 
@@ -282,10 +282,10 @@ class DroneServer : public rclcpp::Node{
     {
         while(rclcpp::ok()){
 
-            if(altitude_>1.5 && state_==1){
+            if(altitude_>1.5){
                 RCLCPP_INFO(this->get_logger(),"Be careful, MAX altitude exceeded");
             }
-            else if(altitude_< 0.1 && state_==0){
+            else if(altitude_< 0.1){
                 RCLCPP_INFO(this->get_logger(),"Be careful, MIN altitude exceeded");
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
