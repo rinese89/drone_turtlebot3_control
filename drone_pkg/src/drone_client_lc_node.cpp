@@ -69,46 +69,226 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
         RCLCPP_INFO(get_logger(),"on_activate() called");
         RCLCPP_INFO(this->get_logger(),"Last state id: %d, label: %s,",state.id(),state.label().c_str());    
 
+        RCLCPP_INFO(this->get_logger(),"Ready to send CONTROL");
+
         //--------------------- Demo ------------------------------
 
-        RCLCPP_INFO(this->get_logger(),"Start DEMO");
-
-        drone_actions::action::TakeoffLanding::Goal goal_demo_msg;
-        goal_demo_msg.drone_state = "demo";
-        goal_demo_msg.throttle = 0.2;
-        goal_demo_msg.yaw = 10.0;
-        goal_demo_msg.time = 5.0;
-
-        RCLCPP_INFO(this->get_logger(),"Ready to send DEMO Goal");
-        std::thread{std::bind(&DroneClient::send_a_goal,this,std::placeholders::_1),goal_demo_msg}.detach();
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(10000));
+        //RCLCPP_INFO(this->get_logger(),"Start DEMO");
+//
+        //drone_actions::action::TakeoffLanding::Goal goal_demo_msg;
+        //goal_demo_msg.drone_state = "demo";
+        //goal_demo_msg.throttle = 0.2;
+        //goal_demo_msg.yaw = 10.0;
+        //goal_demo_msg.time = 5.0;
+//
+        //RCLCPP_INFO(this->get_logger(),"Ready to send DEMO Goal");
+        //std::thread{std::bind(&DroneClient::send_a_goal,this,std::placeholders::_1),goal_demo_msg}.detach();
+//
+        //std::this_thread::sleep_for(std::chrono::milliseconds(10000));
 
         //--------------------- Control ------------------------------
 
-        drone_actions::action::TakeoffLanding::Goal goal_control_msg;
-        goal_control_msg.drone_state = "control";
+        //drone_actions::action::TakeoffLanding::Goal goal_control_msg;
+        //goal_control_msg.drone_state = "control";
 
-        RCLCPP_INFO(this->get_logger(),"Ready to send CONTROL Goal");
-        std::thread{std::bind(&DroneClient::send_a_goal,this,std::placeholders::_1),goal_control_msg}.detach();
+        //for(int i=1;i<=3;i++){
+        //    sendCmd((char*)"CONTROL", 0, 0, i*0.1, 0); // Throttle, Yaw, Pitch, Roll
+        //    std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+        //    sendCmd((char*)"CONTROL", 0, 0, -i*0.1, 0); // Throttle, Yaw, Pitch, Roll
+        //    std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+        //    }
+
+        
+        //---------------------- YAW -----------------------------------------
+
+        //std::thread{std::bind(&DroneClient::send_a_goal,this,std::placeholders::_1),goal_control_msg}.detach();
+       
+        RCLCPP_INFO(this->get_logger(),"Ready to YAW control");
 
         //double t=0.0;
-        //while(t<10)
-        //{
-        //geometry_msgs::msg::Twist drone_cmd_vel_msg;
-        //drone_cmd_vel_msg.linear.x = 0.1+t*0.1;
-        //drone_cmd_vel_msg.linear.y = 0.6+t*0.1;
-        //drone_cmd_vel_msg.linear.z = 0.3+t*0.1;
-        //drone_cmd_vel_msg.angular.z = 0.5+t*0.1;  
+        for(int i=1;i<=3;i++){
+
+        geometry_msgs::msg::Twist drone_cmd_vel_msg;
+        drone_cmd_vel_msg.linear.x = 0.0;
+        drone_cmd_vel_msg.linear.y = 0.0;
+        drone_cmd_vel_msg.linear.z = 0.0;
+        drone_cmd_vel_msg.angular.z = i*10;  
+
+        drone_cmd_vel_pub_->publish(drone_cmd_vel_msg);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(6000));
+
+        drone_cmd_vel_msg.linear.x = 0.0;
+        drone_cmd_vel_msg.linear.y = 0.0;
+        drone_cmd_vel_msg.linear.z = 0.0;
+        drone_cmd_vel_msg.angular.z = 0.0;  
+
+        drone_cmd_vel_pub_->publish(drone_cmd_vel_msg);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+
+        drone_cmd_vel_msg.linear.x = 0.0;
+        drone_cmd_vel_msg.linear.y = 0.0;
+        drone_cmd_vel_msg.linear.z = 0.0;
+        drone_cmd_vel_msg.angular.z = -i*10;  
+
+        drone_cmd_vel_pub_->publish(drone_cmd_vel_msg);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(6000));
+
+        drone_cmd_vel_msg.linear.x = 0.0;
+        drone_cmd_vel_msg.linear.y = 0.0;
+        drone_cmd_vel_msg.linear.z = 0.0;
+        drone_cmd_vel_msg.angular.z = 0.0;  
+
+        drone_cmd_vel_pub_->publish(drone_cmd_vel_msg);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+        }
+
+
+        //---------------------- PITCH -----------------------------------------
+
+        RCLCPP_INFO(this->get_logger(),"Ready to PITCH control");
+
+        for(int i=1;i<=3;i++){
+
+            geometry_msgs::msg::Twist drone_cmd_vel_msg;
+            drone_cmd_vel_msg.linear.x = i*0.1;   //PITCH
+            drone_cmd_vel_msg.linear.y = 0.0;   //ROLL
+            drone_cmd_vel_msg.linear.z = 0.0;   //throttle
+            drone_cmd_vel_msg.angular.z = 0.0;  //YAW
+
+            drone_cmd_vel_pub_->publish(drone_cmd_vel_msg);
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+
+            drone_cmd_vel_msg.linear.x = 0.0;
+            drone_cmd_vel_msg.linear.y = 0.0;
+            drone_cmd_vel_msg.linear.z = 0.0;
+            drone_cmd_vel_msg.angular.z = 0.0;  
+
+            drone_cmd_vel_pub_->publish(drone_cmd_vel_msg);
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+
+            drone_cmd_vel_msg.linear.x = -i*0.1;
+            drone_cmd_vel_msg.linear.y = 0.0;
+            drone_cmd_vel_msg.linear.z = 0.0;
+            drone_cmd_vel_msg.angular.z = 0.0;  
+
+            drone_cmd_vel_pub_->publish(drone_cmd_vel_msg);
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+
+            drone_cmd_vel_msg.linear.x = 0.0;
+            drone_cmd_vel_msg.linear.y = 0.0;
+            drone_cmd_vel_msg.linear.z = 0.0;
+            drone_cmd_vel_msg.angular.z = 0.0;  
+
+            drone_cmd_vel_pub_->publish(drone_cmd_vel_msg);
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+
+        }
+
+        //---------------------- ROLL -----------------------------------------
+
+        for(int i=1;i<=3;i++){
+            RCLCPP_INFO(this->get_logger(),"Ready to ROLL control");
+    
+            geometry_msgs::msg::Twist drone_cmd_vel_msg;
+            drone_cmd_vel_msg.linear.x = 0.0;   //PITCH
+            drone_cmd_vel_msg.linear.y = i*0.1;   //ROLL
+            drone_cmd_vel_msg.linear.z = 0.0;   //throttle
+            drone_cmd_vel_msg.angular.z = 0.0;  //YAW
+    
+            drone_cmd_vel_pub_->publish(drone_cmd_vel_msg);
+    
+            std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+    
+            drone_cmd_vel_msg.linear.x = 0.0;
+            drone_cmd_vel_msg.linear.y = 0.0;
+            drone_cmd_vel_msg.linear.z = 0.0;
+            drone_cmd_vel_msg.angular.z = 0.0;  
+    
+            drone_cmd_vel_pub_->publish(drone_cmd_vel_msg);
+    
+            std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+    
+            drone_cmd_vel_msg.linear.x = 0.0;
+            drone_cmd_vel_msg.linear.y = -i*0.1;
+            drone_cmd_vel_msg.linear.z = 0.0;
+            drone_cmd_vel_msg.angular.z = 0.0;  
+    
+            drone_cmd_vel_pub_->publish(drone_cmd_vel_msg);
+    
+            std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+    
+            drone_cmd_vel_msg.linear.x = 0.0;
+            drone_cmd_vel_msg.linear.y = 0.0;
+            drone_cmd_vel_msg.linear.z = 0.0;
+            drone_cmd_vel_msg.angular.z = 0.0;  
+    
+            drone_cmd_vel_pub_->publish(drone_cmd_vel_msg);
+    
+            std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+    
+        }
+        
+
+        //---------------------- THROTTLE -----------------------------------------
+        
+        for(int i=1;i<=3;i++){
+           
+            RCLCPP_INFO(this->get_logger(),"Ready to ROLL control");
+
+           geometry_msgs::msg::Twist drone_cmd_vel_msg;
+           drone_cmd_vel_msg.linear.x = 0.0;   //PITCH
+           drone_cmd_vel_msg.linear.y = 0.0;   //ROLL
+           drone_cmd_vel_msg.linear.z = i*0.07;   //throttle
+           drone_cmd_vel_msg.angular.z = 0.0;  //YAW
+
+           drone_cmd_vel_pub_->publish(drone_cmd_vel_msg);
+
+           std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+
+           drone_cmd_vel_msg.linear.x = 0.0;
+           drone_cmd_vel_msg.linear.y = 0.0;
+           drone_cmd_vel_msg.linear.z = 0.0;
+           drone_cmd_vel_msg.angular.z = 0.0;  
+
+           drone_cmd_vel_pub_->publish(drone_cmd_vel_msg);
+
+           std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+
+           drone_cmd_vel_msg.linear.x = 0.0;
+           drone_cmd_vel_msg.linear.y = 0.0;
+           drone_cmd_vel_msg.linear.z = -i*0.07;
+           drone_cmd_vel_msg.angular.z = 0.0;  
+
+           drone_cmd_vel_pub_->publish(drone_cmd_vel_msg);
+
+           std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+
+           drone_cmd_vel_msg.linear.x = 0.0;
+           drone_cmd_vel_msg.linear.y = 0.0;
+           drone_cmd_vel_msg.linear.z = 0.0;
+           drone_cmd_vel_msg.angular.z = 0.0;  
+
+           drone_cmd_vel_pub_->publish(drone_cmd_vel_msg);
+
+           std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+
+        }
 
         //RCLCPP_INFO(this->get_logger(),"Velocity: %.5f,%.5f,%.5f,%.5f",drone_cmd_vel_msg.linear.x,drone_cmd_vel_msg.linear.y,drone_cmd_vel_msg.linear.z,drone_cmd_vel_msg.angular.z);
-        //
-        //drone_cmd_vel_pub_->publish(drone_cmd_vel_msg);
+        
         ////t+=1;
         //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        //}
+        
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+        //std::this_thread::sleep_for(std::chrono::milliseconds(5000));
 
 
         return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
@@ -118,8 +298,17 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
     on_deactivate(const rclcpp_lifecycle::State & state)
     {
         RCLCPP_INFO(get_logger(),"on_deactivate() called");
+        RCLCPP_INFO(this->get_logger(),"Last state id: %d, label: %s,",state.id(),state.label().c_str());  
+        
+        geometry_msgs::msg::Twist drone_cmd_vel_msg;
+        drone_cmd_vel_msg.linear.x = 0.0;
+        drone_cmd_vel_msg.linear.y = 0.0;
+        drone_cmd_vel_msg.linear.z = 0.0;
+        drone_cmd_vel_msg.angular.z = 0.0;  
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-        RCLCPP_INFO(this->get_logger(),"Last state id: %d, label: %s,",state.id(),state.label().c_str());    
+        drone_cmd_vel_pub_->publish(drone_cmd_vel_msg);
 
         drone_actions::action::TakeoffLanding::Goal goal_msg;
         goal_msg.drone_state = "stop";  
@@ -151,10 +340,9 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
     void telemetry_callback(const drone_msgs::msg::DroneTelemetry::SharedPtr telemetry_msg){
 
         double time_drone = telemetry_msg->header.stamp.sec + telemetry_msg->header.stamp.nanosec*1e-9;
-        xp_drone_ = telemetry_msg->velocity.linear.x;
-        yp_drone_ = telemetry_msg->velocity.linear.y;
-        zp_drone_ = telemetry_msg->velocity.linear.z;
-        thetap_drone_ = telemetry_msg->velocity.angular.z;
+        xp_drone_ = telemetry_msg->velocity.x;
+        yp_drone_ = telemetry_msg->velocity.y;
+        zp_drone_ = telemetry_msg->velocity.z;
         geometry_msgs::msg::Quaternion q_msg = telemetry_msg->orientation;
 
         tf2::Quaternion q_drone;
@@ -162,7 +350,7 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
         tf2::Matrix3x3 m(q_drone);
         m.getRPY(roll_,pitch_,yaw_);
 
-        RCLCPP_DEBUG(this->get_logger(),"Telemetry: Time: %.5f, x_vel: %.5f, y_vel: %.5f, z_vel: %.5f, theta_vel: %.5f,roll: %.5f, pitch: %.5f, yaw: %.5f",time_drone,xp_drone_,yp_drone_,zp_drone_,thetap_drone_,roll_,pitch_,yaw_);
+        RCLCPP_DEBUG(this->get_logger(),"Telemetry: Time: %.5f, x_vel: %.5f, y_vel: %.5f, z_vel: %.5f,roll: %.5f, pitch: %.5f, yaw: %.5f",time_drone,xp_drone_,yp_drone_,zp_drone_,roll_,pitch_,yaw_);
     }
 
     //------------------------- Handle Server Response --------------------------------------------------

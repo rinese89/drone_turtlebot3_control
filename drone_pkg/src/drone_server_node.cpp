@@ -22,6 +22,9 @@
 #include "drone_actions/action/takeoff_landing.hpp"
 #include "drone_msgs/msg/drone_telemetry.hpp"
 
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp> //Uso de tf2 para pasar de RPY a Quaternios
+
+
 //-------------
 #include "drone_pkg/ClientNetwork.h"
 
@@ -57,7 +60,7 @@ class DroneServer : public rclcpp::Node{
         
         // ------------------------- Sockets ----------------------------
         
-        //clientCmd = new ClientNetwork((char*)&HOST, (char*)&PORT_CMD);
+        clientCmd = new ClientNetwork((char*)&HOST, (char*)&PORT_CMD);
         clientTel = new ClientNetwork((char*)&HOST, (char*)&PORT_TEL);
         
         // ------------------------- Threads -----------------------------
@@ -153,21 +156,13 @@ class DroneServer : public rclcpp::Node{
         auto feedback = std::make_shared<drone_actions::action::TakeoffLanding::Feedback>();
 
         RCLCPP_INFO(this->get_logger(),"Goal receive in takeoff function: %s", goal->drone_state.c_str());
-        
-        if(goal->drone_state=="start")
-        {
-            sendCmd((char*)"TAKEOFF",0,0,0,0);
-            RCLCPP_INFO(this->get_logger(),"Drone taking off");
-            //std::this_thread::sleep_for(std::chrono::milliseconds(5000));
-            //while(altitude_<1.0)
-            //{
-            //    feedback->altitude = altitude_;
-            //    goal_handle->publish_feedback(feedback);
-            //}
-            RCLCPP_INFO(this->get_logger(),"Drone took off");
-            result->ack = "Take off succeed";
-            goal_handle->succeed(result);
-        }
+    
+        sendCmd((char*)"TAKEOFF",0,0,0,0);
+        RCLCPP_INFO(this->get_logger(),"Drone taking off");
+
+        RCLCPP_INFO(this->get_logger(),"Drone took off");
+        result->ack = "Take off succeed";
+        goal_handle->succeed(result);
     }
 
     void execute_landing(const std::shared_ptr<rclcpp_action::ServerGoalHandle<drone_actions::action::TakeoffLanding>> goal_handle){
@@ -329,17 +324,29 @@ class DroneServer : public rclcpp::Node{
                 attRoll = byte2double((char*)telemetry, 24);
                 attPitch = byte2double((char*)telemetry, 32);
 
-                telemetry_msg.velocity.linear.x=velX;
-                telemetry_msg.velocity.linear.y=velY;
-                telemetry_msg.velocity.linear.z=velZ;
-                telemetry_msg.velocity.angular.z=attYaw;
-                telemetry_msg.altitude = attAlt;
+                tf2::Quaternion q;
+                q.setRPY(attRoll,attPitch,attYaw);
 
-                
+                geometry_msgs::msg::Vector3 vel_msg;
+
+                vel_msg.x=velX;
+                vel_msg.y=velY;
+                vel_msg.z=velZ;
+
+                geometry_msgs::msg::Quaternion ori_msg;
+
+                ori_msg.x = q.x();
+                ori_msg.y = q.y();
+                ori_msg.z = q.z();
+                ori_msg.w = q.w();
+
+                telemetry_msg.velocity = vel_msg;
+                telemetry_msg.orientation = ori_msg;
+
+                telemetry_msg.altitude = attAlt;
         
-                drone_telemetry_pub_->publish(telemetry_msg)
-                //printf("(Yaw:%f Pitch:%f Roll:%f)->%d\n", attYaw, attPitch, attRoll, num);
-                
+                drone_telemetry_pub_->publish(telemetry_msg);
+                printf("(Yaw:%f Pitch:%f Roll:%f)->%d\n", attYaw, attPitch, attRoll, num);       
         }
     }
 
@@ -354,29 +361,28 @@ class DroneServer : public rclcpp::Node{
     {
         while(rclcpp::ok()){
 
-            if(altitude_>1.5){
+            if(altitude_>20.0){
                 RCLCPP_INFO(this->get_logger(),"Be careful, MAX altitude exceeded");
             }
-            else if(altitude_< -0.0){
+            else if(altitude_< -0.1){
                 RCLCPP_INFO(this->get_logger(),"Be careful, MIN altitude exceeded");
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
         }
     }   
     
-    void drone_cmd_vel_callback(const std::shared_ptr<geometry_msgs::msg::Twist> drone_cmd_vel_msg){
+    void drone_cmd_vel_callback(const std::shared_ptr<geometry_msgs::msg::Twist> drone_cmd_vel_msg)
+    {    //std::cout << "Init callback cmd_vel" << std::endl;
 
-        if (drone_commands_callback_flag_){
-            
-            sendCmd((char*)"CONTROL", drone_cmd_vel_msg->linear.z, drone_cmd_vel_msg->linear.x,
-                                    drone_cmd_vel_msg->linear.y, drone_cmd_vel_msg->linear.z); // Throttle, Yaw, Pitch, Roll
-                                    
-            RCLCPP_INFO(this->get_logger(),"Drone_cmd_vel_callback: Throttle: %.5f, Yaw: %.5f, Pitch: %.5f, Roll: %.5f",drone_cmd_vel_msg->linear.z,drone_cmd_vel_msg->linear.x,drone_cmd_vel_msg->linear.y,drone_cmd_vel_msg->angular.z);
-        }
+        sendCmd((char*)"CONTROL", drone_cmd_vel_msg->linear.z, drone_cmd_vel_msg->angular.z,
+                                drone_cmd_vel_msg->linear.x, drone_cmd_vel_msg->linear.y); // Throttle, Yaw, Pitch, Roll
+                                
+        RCLCPP_INFO(this->get_logger(),"Drone_cmd_vel_callback: Throttle: %.5f, Yaw: %.5f, Pitch: %.5f, Roll: %.5f",drone_cmd_vel_msg->linear.z,drone_cmd_vel_msg->linear.x,drone_cmd_vel_msg->linear.y,drone_cmd_vel_msg->angular.z);
     }
 
     void sendCmd(char* com, float throttle, float yaw, float pitch, float roll)
     {
+        //std::cout << "Send Command init" << std::endl;
         unsigned char control[TEL_PACKET_CONTROL];
         int bytesSended; 
 
@@ -394,6 +400,7 @@ class DroneServer : public rclcpp::Node{
             float2byte(control, roll, 21);
             control[25] = 0xff;
             control[26] = 0x1a;
+            
             bytesSended = TEL_PACKET_CONTROL;
         }
         else
@@ -402,7 +409,10 @@ class DroneServer : public rclcpp::Node{
             control[10] = 0x1a;
             bytesSended = 11;
         }
+        //std::cout << "Send packet" << std::endl;
         clientCmd->sendPacket((char *) control, bytesSended);
+        //std::cout << "Send Command final" << std::endl;
+
     }
 
     float byte2float(char* buffer, int pos)

@@ -14,7 +14,9 @@ find_package(drone_actions REQUIRED)
 find_package(drone_msgs REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(geometry_msgs REQUIRED)
-find_package(tf2_geometry_msgs REQUIRED)  
+find_package(tf2_geometry_msgs REQUIRED) 
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED) 
 
 #-------- Headers files ----------------
 
@@ -42,6 +44,8 @@ ament_target_dependencies(
   "drone_actions"
   "drone_msgs"
   "geometry_msgs"
+  "tf2_geometry_msgs"
+
 )
 
 #---- Executables & Dependencies -----
