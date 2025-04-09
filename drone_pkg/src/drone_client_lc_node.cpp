@@ -8,6 +8,9 @@
 // ros client library
 #include <rclcpp/rclcpp.hpp>
 
+// msgs
+# include <geometry_msgs/msg/twist.hpp>
+
 // tf2 
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
@@ -145,10 +148,9 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
     void telemetry_callback(const drone_msgs::msg::DroneTelemetry::SharedPtr telemetry_msg){
 
         double time_drone = telemetry_msg->header.stamp.sec + telemetry_msg->header.stamp.nanosec*1e-9;
-        double xp_drone = telemetry_msg->velocity.linear.x;
-        double yp_drone = telemetry_msg->velocity.linear.y;
-        double zp_drone = telemetry_msg->velocity.linear.z;
-        double thetap_drone = telemetry_msg->velocity.angular.z;
+        double xp_drone = telemetry_msg->velocity.x;
+        double yp_drone = telemetry_msg->velocity.y;
+        double zp_drone = telemetry_msg->velocity.z;
 
         geometry_msgs::msg::Quaternion q_msg = telemetry_msg->orientation;
 
@@ -162,7 +164,7 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
             tel++;
         }
         else{
-            RCLCPP_DEBUG(this->get_logger(),"Telemetry: Time: %.5f, x_vel: %.5f, y_vel: %.5f, z_vel: %.5f, theta_vel: %.5f,roll: %.5f, pitch: %.5f, yaw: %.5f",time_drone,xp_drone,yp_drone,zp_drone,thetap_drone,roll,pitch,yaw);
+            RCLCPP_DEBUG(this->get_logger(),"Telemetry: Time: %.5f, x_vel: %.5f, y_vel: %.5f, z_vel: %.5f,roll: %.5f, pitch: %.5f, yaw: %.5f",time_drone,xp_drone,yp_drone,zp_drone,roll,pitch,yaw);
             tel=0;
         }
 
