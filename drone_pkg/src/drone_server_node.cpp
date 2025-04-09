@@ -159,11 +159,11 @@ class DroneServer : public rclcpp::Node{
             sendCmd((char*)"TAKEOFF",0,0,0,0);
             RCLCPP_INFO(this->get_logger(),"Drone taking off");
             //std::this_thread::sleep_for(std::chrono::milliseconds(5000));
-            while(altitude_<1.0)
-            {
-                feedback->altitude = altitude_;
-                goal_handle->publish_feedback(feedback);
-            }
+            //while(altitude_<1.0)
+            //{
+            //    feedback->altitude = altitude_;
+            //    goal_handle->publish_feedback(feedback);
+            //}
             RCLCPP_INFO(this->get_logger(),"Drone took off");
             result->ack = "Take off succeed";
             goal_handle->succeed(result);
@@ -183,11 +183,11 @@ class DroneServer : public rclcpp::Node{
             sendCmd((char*)"LANDING",0,0,0,0);
             RCLCPP_INFO(this->get_logger(),"Drone landing");
             //std::this_thread::sleep_for(std::chrono::milliseconds(5000));
-            while(altitude_>0.0)
-            {
-                feedback->altitude = altitude_;
-                goal_handle->publish_feedback(feedback);
-            }
+            //while(altitude_>0.0)
+            //{
+            //    feedback->altitude = altitude_;
+            //    goal_handle->publish_feedback(feedback);
+            //}
             RCLCPP_INFO(this->get_logger(),"Drone landed");
             result->ack = "Landed succeed";
             goal_handle->succeed(result);
@@ -249,80 +249,106 @@ class DroneServer : public rclcpp::Node{
 
     void read_publish_telemetry(){
 
-        int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
-        if (clientSocket < 0) {
-            std::cerr << "Creation of client socket failed." << std::endl;
-        }
-    
-        struct sockaddr_in serverAddr;
-        serverAddr.sin_family = AF_INET;
-        serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-        serverAddr.sin_port = htons(port);
-    
-        if (connect(clientSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
-            std::cerr << "Connection Error..." << std::endl;
-        }
-    
-        std::cout << "Connection Established..." << std::endl;
-
         drone_msgs::msg::DroneTelemetry telemetry_msg;
+        RCLCPP_INFO(this->get_logger(),"Reading buffer");
 
         while(rclcpp::ok())
         {
+            char telemetry[TEL_PACKET_SIZE + 2]; // almaceno 2 bytes m�s con la terminaci�n del paquete 0xff1a
+            char telemetry_tmp[TEL_PACKET_SIZE + 2]; //temporary buffer
+
+            // espero la cabecera 0x1aff
+            bool header, dataValid;
+            char cab1, cab2;
+            int num,init;
+
+            dataValid = false;
+
+            while (!dataValid)
+            {
+                header = false;
+                while (!header)
+                {
+                
+                    NetworkServices::receiveMessage(clientTel->ConnectSocket, (char *) &cab1, 1);
+                    //printf("cab 1 = %x\n", cab1);
+                
+                    if (cab1 == 0x1a)
+                    {
+                        NetworkServices::receiveMessage(clientTel->ConnectSocket, (char *) &cab2, 1);
+                        //printf("cab 2 = %x\n", cab2);
+                        if (cab2 == -1)
+                        {
+                            header = true;
+                        }
+                    }
+                }
             
-            char receiveMessage[MAX];
-            char receiveMessage1[MAX];
-
-            memset(receiveMessage, 0, MAX);
-
-            int rMsgSize = recv(clientSocket, receiveMessage, MAX, 0);
-            if (rMsgSize < 0) {
-                std::cerr << "Packet receive failed." << std::endl;
-                break;
-            } else if (rMsgSize == 0) {
-                std::cout << "Server is off." << std::endl;
-                break;
-            }
-            receiveMessage1[0] = receiveMessage[0];
-            std::cout << "Server: " << receiveMessage << std::flush;
-
-            if(receiveMessage1[0]=='u')
-            {
-                RCLCPP_INFO(this->get_logger(),"%s",receiveMessage1);
-                altitude_+=0.1;
-                telemetry_msg.altitude = altitude_;
-            }
-            else if(receiveMessage1[0]=='d')
-            {
-                RCLCPP_INFO(this->get_logger(),"%s",receiveMessage1);
-                altitude_-=0.1;
-                telemetry_msg.altitude = altitude_;
-            }
-
-            else if(receiveMessage1[0]=='y')
-            {
-                RCLCPP_INFO(this->get_logger(),"%s",receiveMessage1);
-                yaw_+=0.1;
-                telemetry_msg.orientation.z = yaw_; 
-
-            }
-            else if(receiveMessage1[0]=='i')
-            {
-                RCLCPP_INFO(this->get_logger(),"%s",receiveMessage1);
-                yaw_-=0.1;
-                telemetry_msg.orientation.z = yaw_; 
-            }
+                // tomo el paquete de 56 + 2 bytes de 
+                init=0;
+                num = 0;
             
-            drone_telemetry_pub_->publish(telemetry_msg);
+                while (num < TEL_PACKET_SIZE + 2)
+                {
+                    int iResult = NetworkServices::receiveMessage(clientTel->ConnectSocket, (char *) telemetry_tmp, TEL_PACKET_SIZE + 2 - num);
+                
+                    if (iResult == 0)
+                    {
+                        printf("Connection closed\n");
+                        //closesocket(clientCmd->ConnectSocket);
+                        exit(1);
+                    }
+                    num = num + iResult;
+
+                    //memcpy(telemtry,teleme)
+
+                    //for(int i=init;i<iResult;i++){
+//
+                    //    telemetry[init+i]=telemetry_tmp[i];
+                    //}
+                    for (int i = 0; i < iResult; i++) {
+                        telemetry[init + i] = telemetry_tmp[i];
+                    }
+
+                    init=num;
+                }
+                // compruebo que el paquete termina con 0xff1a
+            
+                if (telemetry[TEL_PACKET_SIZE] == -1 && telemetry[TEL_PACKET_SIZE + 1] == 0x1a)
+                {
+                    dataValid = true;
+                }
+            }
+
+        
+                velX = byte2float((char*)telemetry, 0);
+                velY = byte2float((char*)telemetry, 4);
+                velZ = byte2float((char*)telemetry, 8);
+                attAlt = byte2float((char*)telemetry, 12);
+                attYaw = byte2double((char*)telemetry, 16);
+                attRoll = byte2double((char*)telemetry, 24);
+                attPitch = byte2double((char*)telemetry, 32);
+
+                telemetry_msg.velocity.linear.x=velX;
+                telemetry_msg.velocity.linear.y=velY;
+                telemetry_msg.velocity.linear.z=velZ;
+                telemetry_msg.velocity.angular.z=attYaw;
+                telemetry_msg.altitude = attAlt;
+
+                
+        
+                drone_telemetry_pub_->publish(telemetry_msg)
+                //printf("(Yaw:%f Pitch:%f Roll:%f)->%d\n", attYaw, attPitch, attRoll, num);
+                
         }
     }
 
-    void sendCmd(char* com, float throttle, float yaw, float pitch, float roll)
-    {
-        RCLCPP_INFO(this->get_logger(),"Commad: %s -> Throttle: %.5f, Yaw: %.5f, Pitch: %.5f, Roll: %.5f",com,throttle,yaw,pitch,roll);
-        altitude_+=0.1;
-        yaw_+=0.2;
-    }
+   // void sendCmd(char* com, float throttle, float yaw, float pitch, float roll)
+   // {
+   //     RCLCPP_INFO(this->get_logger(),"Commad: %s -> Throttle: %.5f, Yaw: %.5f, Pitch: %.5f, Roll: %.5f",com,throttle,yaw,pitch,roll);
+   //     altitude_+=0.1;
+   //     yaw_+=0.2;
+   // }
 
     void security_control()
     {
@@ -346,6 +372,67 @@ class DroneServer : public rclcpp::Node{
                                     drone_cmd_vel_msg->linear.y, drone_cmd_vel_msg->linear.z); // Throttle, Yaw, Pitch, Roll
                                     
             RCLCPP_INFO(this->get_logger(),"Drone_cmd_vel_callback: Throttle: %.5f, Yaw: %.5f, Pitch: %.5f, Roll: %.5f",drone_cmd_vel_msg->linear.z,drone_cmd_vel_msg->linear.x,drone_cmd_vel_msg->linear.y,drone_cmd_vel_msg->angular.z);
+        }
+    }
+
+    void sendCmd(char* com, float throttle, float yaw, float pitch, float roll)
+    {
+        unsigned char control[TEL_PACKET_CONTROL];
+        int bytesSended; 
+
+        control[0] = 0x1a;
+        control[1] = 0xff;
+        for (int i = 0; i < 7; i++)
+        {
+            control[i + 2] = com[i];
+        }
+        if (strcmp(com,"CONTROL") == 0)
+        {
+            float2byte(control, throttle, 9);
+            float2byte(control, yaw, 13);
+            float2byte(control, pitch, 17);
+            float2byte(control, roll, 21);
+            control[25] = 0xff;
+            control[26] = 0x1a;
+            bytesSended = TEL_PACKET_CONTROL;
+        }
+        else
+        {
+            control[9] = 0xff;
+            control[10] = 0x1a;
+            bytesSended = 11;
+        }
+        clientCmd->sendPacket((char *) control, bytesSended);
+    }
+
+    float byte2float(char* buffer, int pos)
+    {
+        float f;
+        char* ptr = (char*)&f;
+        for (int i = 0; i < 4; i++)
+        {
+            ptr[3-i] = buffer[pos + i];
+        }
+        return f;
+    }
+
+    double byte2double(char* buffer, int pos)
+    {
+        double d;
+        char* ptr = (char*)&d;
+        for (int i = 0; i < 8; i++)
+        {
+            ptr[7-i] = buffer[pos + i];
+        }
+        return d;
+    }
+
+    void float2byte(unsigned char* buffer, float f, int pos)
+    {
+        char* ptr = (char*)&f;
+        for (int i = 0; i < 4; i++)
+        {
+            buffer[pos + i] = ptr[3 - i];
         }
     }
 
