@@ -14,7 +14,8 @@ find_package(drone_actions REQUIRED)
 find_package(drone_msgs REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(geometry_msgs REQUIRED)
-find_package(tf2_geometry_msgs REQUIRED)  
+find_package(tf2_geometry_msgs REQUIRED)
+find_package(nav_msgs)  
 
 #-------- Headers files ----------------
 
@@ -60,6 +61,7 @@ ament_target_dependencies(
   "lifecycle_msgs"
   "rclcpp_lifecycle"
   "tf2_geometry_msgs"
+  "nav_msgs"
 )
 
 #--------- Link libraries ---------------

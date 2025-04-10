@@ -9,7 +9,8 @@
 #include <rclcpp/rclcpp.hpp>
 
 // msgs
-# include <geometry_msgs/msg/twist.hpp>
+#include <geometry_msgs/msg/twist.hpp>
+#include <nav_msgs/msg/odometry.hpp>
 
 // tf2 
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
@@ -24,22 +25,34 @@
 
 using namespace std::placeholders;
 
+bool logs_db = false;
+bool logs_cb = false;
+
 class DroneClient : public rclcpp_lifecycle::LifecycleNode{
 
     public: DroneClient() : LifecycleNode("drone_client_lc_node"){
 
         RCLCPP_INFO(get_logger(),"Uncofigured state");
 
+        //-------- Action Client -------------------------
         drone_client_ = rclcpp_action::create_client<drone_actions::action::TakeoffLanding>(this,"drone_command");
-        
-        // To recive action callbacks
+
+        //-------- To recive action callbacks ------------
         send_goal_options_.goal_response_callback = std::bind(&DroneClient::goal_response_callback,this,_1);
         send_goal_options_.feedback_callback = std::bind(&DroneClient::feedback_callback,this,_1,_2);
         send_goal_options_.result_callback = std::bind(&DroneClient::result_callback,this,_1);
 
+        //-------- Publishers & Subscribers --------------
         drone_cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("drone_cmd_vel",10);
+
         drone_telemetry_sub_ = this->create_subscription<drone_msgs::msg::DroneTelemetry>(
             "telemetry",10,std::bind(&DroneClient::telemetry_callback,this,std::placeholders::_1));
+
+        aruco_pose_sub_=this->create_subscription<geometry_msgs::msg::PoseStamped>(
+            "aruco_pose",10,std::bind(&DroneClient::aruco_pose_callback,this,std::placeholders::_1));
+
+        odom_sub_=this->create_subscription<nav_msgs::msg::Odometry>(
+            "odom",10,std::bind(&DroneClient::odom_callback,this,std::placeholders::_1));
 
     }
 
@@ -155,15 +168,20 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
         drone_cmd_vel_msg.linear.x = 0.1+t*0.1;
         drone_cmd_vel_msg.linear.y = 0.6+t*0.1;
         drone_cmd_vel_msg.linear.z = 0.3+t*0.1;
-        drone_cmd_vel_msg.angular.z = 0.5+t*0.1;  
+        drone_cmd_vel_msg.angular.z = 0.5+t*0.1;
+        
+        double diff_time_odom_ar = time_odom - time_ar;
+        RCLCPP_INFO(this->get_logger(),"Time Diff: %f", diff_time_odom_ar);
 
-        //RCLCPP_INFO(this->get_logger(),"Velocity: %.5f,%.5f,%.5f,%.5f",drone_cmd_vel_msg.linear.x,drone_cmd_vel_msg.linear.y,drone_cmd_vel_msg.linear.z,drone_cmd_vel_msg.angular.z);
+        if(logs_db)
+            RCLCPP_INFO(this->get_logger(),"Velocity: %.5f,%.5f,%.5f,%.5f",drone_cmd_vel_msg.linear.x,drone_cmd_vel_msg.linear.y,drone_cmd_vel_msg.linear.z,drone_cmd_vel_msg.angular.z);
         
         drone_cmd_vel_pub_->publish(drone_cmd_vel_msg);
         t+=0.1;
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 
+        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
         if(control_flag_)
         {
             drone_actions::action::TakeoffLanding::Goal goal_control_msg;
@@ -175,42 +193,80 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
         control_flag_=false;
     }
 
-    //------------------------- Callbacks functions -----------------------------------------------------
+    //------------------------- Callbacks Subscriptions functions -----------------------------------------------------
     
-    void telemetry_callback(const drone_msgs::msg::DroneTelemetry::SharedPtr telemetry_msg){
+    void telemetry_callback(const drone_msgs::msg::DroneTelemetry::SharedPtr telemetry_msg)
+    {
 
-        double time_drone = telemetry_msg->header.stamp.sec + telemetry_msg->header.stamp.nanosec*1e-9;
-        double xp_drone = telemetry_msg->velocity.x;
-        double yp_drone = telemetry_msg->velocity.y;
-        double zp_drone = telemetry_msg->velocity.z;
+        time_tel = telemetry_msg->header.stamp.sec + telemetry_msg->header.stamp.nanosec*1e-9;
+        xp_tel = telemetry_msg->velocity.x;
+        yp_tel = telemetry_msg->velocity.y;
+        zp_tel = telemetry_msg->velocity.z;
 
         geometry_msgs::msg::Quaternion q_msg = telemetry_msg->orientation;
 
         tf2::Quaternion q_drone;
         tf2::fromMsg(q_msg,q_drone);
         tf2::Matrix3x3 m(q_drone);
-        double roll,pitch,yaw;
-        m.getRPY(roll,pitch,yaw);
+        m.getRPY(roll_tel,pitch_tel,yaw_tel);
 
-        if(tel<5){
-            tel++;
-        }
-        else{
-            RCLCPP_DEBUG(this->get_logger(),"Telemetry: Time: %.5f, x_vel: %.5f, y_vel: %.5f, z_vel: %.5f,roll: %.5f, pitch: %.5f, yaw: %.5f",time_drone,xp_drone,yp_drone,zp_drone,roll,pitch,yaw);
-            tel=0;
-        }
+        if(logs_cb)
+            RCLCPP_INFO(this->get_logger(),"Telemetry: Time: %.5f, x_vel: %.5f, y_vel: %.5f, z_vel: %.5f,roll: %.5f, pitch: %.5f, yaw: %.5f",time_tel,xp_tel,yp_tel,zp_tel,roll_tel,pitch_tel,yaw_tel);
+    }
 
-        //TODO: Implement security flag for telemetry
+    void aruco_pose_callback(const geometry_msgs::msg::PoseStamped::SharedPtr aruco_msg)
+    {
+
+        time_ar = aruco_msg->header.stamp.sec + aruco_msg->header.stamp.nanosec*1e-9;
+        x_ar = aruco_msg->pose.position.x;
+        y_ar = aruco_msg->pose.position.y;
+        z_ar = aruco_msg->pose.position.z;
+
+        tf2::Quaternion q(aruco_msg->pose.orientation.x,
+                            aruco_msg->pose.orientation.y,
+                            aruco_msg->pose.orientation.z,
+                            aruco_msg->pose.orientation.w);
+        
+        tf2::Matrix3x3 m(q);
+        m.getRPY(roll_ar,pitch_ar,yaw_ar);
+
+        if(logs_cb)
+            RCLCPP_INFO(this->get_logger(),"Aruco Pose: Time: %.5f, x_ar: %.5f, y_ar: %.5f, z_ar: %.5f,roll: %.5f, pitch: %.5f, yaw: %.5f",time_ar,x_ar,y_ar,z_ar,roll_ar,pitch_ar,yaw_ar);
+    }
+
+    void odom_callback(const nav_msgs::msg::Odometry::SharedPtr odom_msg)
+    {
+        time_odom = odom_msg->header.stamp.sec + odom_msg->header.stamp.nanosec*1e-9;
+        x_odom = odom_msg->pose.pose.position.x;
+        y_odom = odom_msg->pose.pose.position.y;
+
+        xp_odom = odom_msg->twist.twist.linear.x;
+        yp_odom = odom_msg->twist.twist.linear.y;
+        
+        tf2::Quaternion q(odom_msg->pose.pose.orientation.x,
+                            odom_msg->pose.pose.orientation.y,
+                            odom_msg->pose.pose.orientation.z,
+                            odom_msg->pose.pose.orientation.w);
+        tf2::Matrix3x3 m(q);
+        double roll,pitch;
+        m.getRPY(roll,pitch,yaw_odom);
+
+        yawp_odom = odom_msg->twist.twist.angular.z;
+
+        if(logs_cb)
+            RCLCPP_INFO(this->get_logger(),"Odom Pose: Time: %.5f, x_odom: %.5f, y_odom: %.5f, yaw_odom: %.5f",time_odom,x_odom,y_odom,yaw_odom);
     }
 
     //------------------------- Handle Server Response --------------------------------------------------
 
-    void goal_response_callback(rclcpp_action::ClientGoalHandle<drone_actions::action::TakeoffLanding>::SharedPtr goal_handle){
+    void goal_response_callback(rclcpp_action::ClientGoalHandle<drone_actions::action::TakeoffLanding>::SharedPtr goal_handle)
+    {
 
         auto goal_status = goal_handle->get_status();
 
         std::string status_str;
-        switch (goal_status) {
+        switch (goal_status) 
+        {
             case rclcpp_action::GoalStatus::STATUS_ACCEPTED:
                 status_str = "ACCEPTED";
                 break;
@@ -239,14 +295,15 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
 
         if(!goal_handle)
             RCLCPP_INFO(this->get_logger(),"Goal rejected by server");
-        else{
+        else
             RCLCPP_INFO(this->get_logger(),"Goal accepted by server, waiting for result");
-        }
     }
 
-    void feedback_callback(rclcpp_action::ClientGoalHandle<drone_actions::action::TakeoffLanding>::SharedPtr goal_handle, const std::shared_ptr<const drone_actions::action::TakeoffLanding::Feedback> feedback){
+    void feedback_callback(rclcpp_action::ClientGoalHandle<drone_actions::action::TakeoffLanding>::SharedPtr goal_handle, const std::shared_ptr<const drone_actions::action::TakeoffLanding::Feedback> feedback)
+    {
 
-        if((feedback->altitude > 1.5) && (goal_active_)){
+        if((feedback->altitude > 1.5) && (goal_active_))
+        {
             RCLCPP_INFO(this->get_logger(),"Cancel from feedback_callback");
             cancel_goal_th_ = std::thread(&DroneClient::cancel_a_goal,this,goal_handle);
             cancel_goal_th_.detach();
@@ -258,26 +315,21 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
         //    cancel_goal_th_.detach();
         //}
 
-        if(pub<100000){
-            pub++;
-        }
-        else{
-            RCLCPP_INFO(this->get_logger(),"Altitude from feedback: %.5f", feedback->altitude);
-            pub=0;
-        }
-
-       //RCLCPP_INFO(this->get_logger(),"Altitude from feedback: %.5f", feedback->altitude);
+        if(logs_cb)
+            RCLCPP_INFO(this->get_logger(),"Altitude from feedback: %.5f", feedback->altitude);        
     }
 
-    void result_callback(const rclcpp_action::ClientGoalHandle<drone_actions::action::TakeoffLanding>::WrappedResult & result){
+    void result_callback(const rclcpp_action::ClientGoalHandle<drone_actions::action::TakeoffLanding>::WrappedResult & result)
+    {
         std::string result_recive = result.result->ack;
         RCLCPP_INFO(this->get_logger(),"Result received: %s",result_recive.c_str());
         goal_active_=false;
     }
 
-    // ----------------------- Handle Goal Client --------------------------------------------------------
+    // ----------------------- Send & Cancel Goal to Action Server --------------------------------------------------------
 
-    void send_a_goal(drone_actions::action::TakeoffLanding::Goal goal_msg){
+    void send_a_goal(drone_actions::action::TakeoffLanding::Goal goal_msg)
+    {
     
         RCLCPP_INFO(this->get_logger(),"Ready to send a Goal");
         drone_client_->async_send_goal(goal_msg,send_goal_options_);
@@ -285,7 +337,8 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
         RCLCPP_INFO(this->get_logger(),"Goal sent");
     }
 
-    void cancel_a_goal(rclcpp_action::ClientGoalHandle<drone_actions::action::TakeoffLanding>::SharedPtr goal_handle){
+    void cancel_a_goal(rclcpp_action::ClientGoalHandle<drone_actions::action::TakeoffLanding>::SharedPtr goal_handle)
+    {
         
         RCLCPP_WARN(this->get_logger(),"Trying to cancel the goal");
         drone_client_->async_cancel_goal(goal_handle);
@@ -296,7 +349,10 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
     rclcpp_action::Client<drone_actions::action::TakeoffLanding>::SendGoalOptions send_goal_options_;
 
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr drone_cmd_vel_pub_;
+
     rclcpp::Subscription<drone_msgs::msg::DroneTelemetry>::SharedPtr drone_telemetry_sub_;
+    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr aruco_pose_sub_;
+    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
 
     std::thread send_goal_th_;
     std::thread cancel_goal_th_;
@@ -306,9 +362,29 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
     int pub=0;
     int tel=0;
 
+    //----Telemetry-------
+    double time_tel,xp_tel,yp_tel,zp_tel,roll_tel,pitch_tel,yaw_tel;
+
+    //------Aruco--------
+    double time_ar,x_ar,y_ar,z_ar,roll_ar,pitch_ar,yaw_ar;
+
+    //----Odometry-------
+    double time_odom,x_odom,y_odom,yaw_odom,xp_odom,yp_odom,yawp_odom;
+
 };
 
 int main(int argc, char* argv[]){
+
+    for (int i = 1; i < argc; ++i)
+    {
+        std::string arg(argv[i]);
+        if (arg == "logs_cb")        
+            logs_cb = true;
+        
+        else if(arg == "logs_db")
+            logs_db = true;
+            
+    }
 
     rclcpp::init(argc,argv);
 

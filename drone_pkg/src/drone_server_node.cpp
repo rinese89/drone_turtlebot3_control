@@ -310,10 +310,10 @@ class DroneServer : public rclcpp::Node{
         serverAddr.sin_port = htons(port);
     
         if (connect(clientSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
-            std::cerr << "Connection Error..." << std::endl;
+            std::cerr << "...Connection Error..." << std::endl;
         }
     
-        std::cout << "Connection Established..." << std::endl;
+        std::cout << "....Connection Established..." << std::endl;
 
         drone_msgs::msg::DroneTelemetry telemetry_msg;
 
@@ -350,6 +350,8 @@ class DroneServer : public rclcpp::Node{
                 yaw_-=0.1;
                 telemetry_msg.orientation.z = yaw_; 
             }
+                
+            telemetry_msg.altitude = altitude_;
             drone_telemetry_pub_->publish(telemetry_msg);
         }
     }
