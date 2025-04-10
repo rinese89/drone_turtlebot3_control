@@ -103,7 +103,12 @@ class DroneServer : public rclcpp::Node{
          }
         else if(goal->drone_state=="start_control"){
             RCLCPP_INFO(this->get_logger(),"Goal Accepted");
-            RCLCPP_INFO(this->get_logger(),"Prepare to takeoff start_control trajectory");
+            RCLCPP_INFO(this->get_logger(),"Prepare to start_control trajectory");
+           return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;       
+        }
+        else if(goal->drone_state=="stop_control"){
+            RCLCPP_INFO(this->get_logger(),"Goal Accepted");
+            RCLCPP_INFO(this->get_logger(),"Prepare to stop control");
            return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;       
         }
         else
@@ -137,7 +142,7 @@ class DroneServer : public rclcpp::Node{
             std::thread{std::bind(&DroneServer::execute_control,this,std::placeholders::_1),goal_handle}.detach();
         }
         else if(goal->drone_state == "stop_control"){
-            std::thread{std::bind(&DroneServer::execute_control,this,std::placeholders::_1),goal_handle}.detach();
+            std::thread{std::bind(&DroneServer::stop_control,this,std::placeholders::_1),goal_handle}.detach();
         }
         else
             RCLCPP_INFO(this->get_logger(),"Goal error");    
@@ -248,11 +253,12 @@ class DroneServer : public rclcpp::Node{
         {
             drone_commands_callback_flag_ = true;
 
-            while(goal_handle->is_active() && !danger_flag_)
+            while(goal_handle->is_active() && !danger_flag_ && !stop_flag_)
             {
                 feedback->altitude = altitude_;
                 goal_handle->publish_feedback(feedback);
             }
+
             if(goal_handle->is_canceling())
             {   
                 result->ack="Control goal canceled";
@@ -265,6 +271,28 @@ class DroneServer : public rclcpp::Node{
             }
 
             drone_commands_callback_flag_ = false;
+            stop_flag_=false;
+        }
+
+    }
+
+    void stop_control(const std::shared_ptr<rclcpp_action::ServerGoalHandle<drone_actions::action::TakeoffLanding>> goal_handle){
+
+        const auto goal = goal_handle->get_goal();
+        auto result = std::make_shared<drone_actions::action::TakeoffLanding::Result>();
+        auto feedback = std::make_shared<drone_actions::action::TakeoffLanding::Feedback>();
+
+        RCLCPP_INFO(this->get_logger(),"Goal receive in stop control function: %s", goal->drone_state.c_str());
+        if(goal->drone_state=="stop_control")
+        {
+            drone_commands_callback_flag_ = false;
+            stop_flag_=true;
+
+            //feedback->cancel = -1.0;
+            //goal_handle->publish_feedback(feedback);
+
+            result->ack="Stop control goal succeed";
+            goal_handle->succeed(result);
         }
 
     }
@@ -328,7 +356,7 @@ class DroneServer : public rclcpp::Node{
 
     void sendCmd(char* com, float throttle, float yaw, float pitch, float roll)
     {
-        RCLCPP_INFO(this->get_logger(),"COMMAND: %s -> Throttle: %.5f, Yaw: %.5f, Pitch: %.5f, Roll: %.5f",com,throttle,yaw,pitch,roll);
+        RCLCPP_INFO(this->get_logger(),"COMMAND within sendCmd function: %s -> Throttle: %.5f, Yaw: %.5f, Pitch: %.5f, Roll: %.5f",com,throttle,yaw,pitch,roll);
     }
 
     void security_control()
@@ -377,6 +405,7 @@ class DroneServer : public rclcpp::Node{
     bool is_landing_ = false;
     bool is_taking_off_ = true;
     bool danger_flag_ = false;
+    bool stop_flag_ = false;
 };
 
 
