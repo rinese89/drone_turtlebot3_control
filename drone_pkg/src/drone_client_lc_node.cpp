@@ -61,7 +61,7 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
 
         RCLCPP_INFO(get_logger(),"on_configure() called");
         RCLCPP_INFO(this->get_logger(),"Last state id: %d, label: %s,",state.id(),state.label().c_str());
-        
+
         while(!drone_client_->wait_for_action_server(std::chrono::seconds(2)))
         {
             RCLCPP_WARN(this->get_logger(), "Trying to connect, waiting Drone_Server to be activated");
@@ -158,27 +158,43 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
 
     //------------------------- CONTROLLER -------------------------------------------------------------
 
-    void controller(double t_duration){
-
+    void controller(double t_duration)
+    {    
         control_flag_=true;
-        double t=0.0;
-        while(t<t_duration && control_flag_)
-        {
-        geometry_msgs::msg::Twist drone_cmd_vel_msg;
-        drone_cmd_vel_msg.linear.x = 0.1+t*0.1;
-        drone_cmd_vel_msg.linear.y = 0.6+t*0.1;
-        drone_cmd_vel_msg.linear.z = 0.3+t*0.1;
-        drone_cmd_vel_msg.angular.z = 0.5+t*0.1;
+        //linear.x -> PITCH
+        //linear.y -> ROLL
+        //linear.z -> throttle
+        //angular.z -> YAW
         
-        double diff_time_odom_ar = time_odom - time_ar;
-        RCLCPP_INFO(this->get_logger(),"Time Diff: %f", diff_time_odom_ar);
+        //double t=0.0;
+        //while(t<t_duration && control_flag_)
 
-        if(logs_db)
-            RCLCPP_INFO(this->get_logger(),"Velocity: %.5f,%.5f,%.5f,%.5f",drone_cmd_vel_msg.linear.x,drone_cmd_vel_msg.linear.y,drone_cmd_vel_msg.linear.z,drone_cmd_vel_msg.angular.z);
-        
-        drone_cmd_vel_pub_->publish(drone_cmd_vel_msg);
-        t+=0.1;
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+         //---Control frequency Hz
+         rclcpp::Rate controller_rate(20); 
+
+        while(control_flag_)
+        {
+            double error_yaw = yaw_ar - yaw_odom;
+            RCLCPP_INFO(this->get_logger(),"Yaw error: %f", error_yaw);
+
+            //if(abs(error)>0.05)
+            //double angular_vel = k*error_yaw;
+
+            geometry_msgs::msg::Twist drone_cmd_vel_msg;
+            //drone_cmd_vel_msg.linear.x = 0.1+t*0.1;
+            //drone_cmd_vel_msg.linear.y = 0.6+t*0.1;
+            //drone_cmd_vel_msg.linear.z = 0.3+t*0.1;
+            //drone_cmd_vel_msg.angular.z = angular_vel;
+            
+            //double diff_time_odom_ar = time_odom - time_ar;
+            //RCLCPP_INFO(this->get_logger(),"Time Diff: %f", diff_time_odom_ar);
+
+            if(logs_db)
+                RCLCPP_INFO(this->get_logger(),"Velocity: %.5f,%.5f,%.5f,%.5f",drone_cmd_vel_msg.linear.x,drone_cmd_vel_msg.linear.y,drone_cmd_vel_msg.linear.z,drone_cmd_vel_msg.angular.z);
+            
+            drone_cmd_vel_pub_->publish(drone_cmd_vel_msg);
+            //t+=0.1;
+            controller_rate.sleep();
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(2000));
