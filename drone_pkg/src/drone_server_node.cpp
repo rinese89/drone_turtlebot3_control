@@ -19,6 +19,8 @@
 #include <rclcpp/rclcpp.hpp>
 #include "rclcpp_action/rclcpp_action.hpp"
 
+# include <geometry_msgs/msg/twist.hpp>
+
 #include "drone_actions/action/takeoff_landing.hpp"
 #include "drone_msgs/msg/drone_telemetry.hpp"
 
@@ -45,7 +47,7 @@ class DroneServer : public rclcpp::Node{
 
     public: DroneServer() : Node("drone_server_node"){
 
-        RCLCPP_INFO(this->get_logger(),"To takeoff: 'start' - To land: 'stop' - To Demo: 'demo' - To Control: 'start_control'");
+        RCLCPP_INFO(this->get_logger(),"To takeoff: 'takeoff' - To land: 'land' - To Demo: 'demo' - To Control: 'start_control'");
 
         // Important: create first the publisher before create the thread
 
@@ -89,19 +91,19 @@ class DroneServer : public rclcpp::Node{
         (void)uuid;
         RCLCPP_INFO(this->get_logger(),"Goal status received: %s",goal->drone_state.c_str());
 
-        if(goal->drone_state=="start"){
+        if(goal->drone_state=="takeoff"){
             RCLCPP_INFO(this->get_logger(),"Goal Accepted");
             RCLCPP_INFO(this->get_logger(),"Prepare to take off");
             return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;       
          }
-        else if(goal->drone_state=="stop"){
+        else if(goal->drone_state=="land"){
             RCLCPP_INFO(this->get_logger(),"Goal Accepted");
             RCLCPP_INFO(this->get_logger(),"Prepare to landing");
             return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;       
          }
         else if(goal->drone_state=="start_control"){
             RCLCPP_INFO(this->get_logger(),"Goal Accepted");
-            RCLCPP_INFO(this->get_logger(),"Prepare to start start_control trajectory");
+            RCLCPP_INFO(this->get_logger(),"Prepare to takeoff start_control trajectory");
            return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;       
         }
         else
@@ -125,13 +127,16 @@ class DroneServer : public rclcpp::Node{
         const auto goal = goal_handle->get_goal();
         RCLCPP_INFO(this->get_logger(),"Goal receive: %s", goal->drone_state.c_str());
 
-        if(goal->drone_state == "start"){
+        if(goal->drone_state == "takeoff"){
             std::thread{std::bind(&DroneServer::execute_takeoff,this,std::placeholders::_1),goal_handle}.detach();
         }
-        else if(goal->drone_state == "stop"){
+        else if(goal->drone_state == "land"){
             std::thread{std::bind(&DroneServer::execute_landing,this,std::placeholders::_1),goal_handle}.detach();
         }
         else if(goal->drone_state == "start_control"){
+            std::thread{std::bind(&DroneServer::execute_control,this,std::placeholders::_1),goal_handle}.detach();
+        }
+        else if(goal->drone_state == "stop_control"){
             std::thread{std::bind(&DroneServer::execute_control,this,std::placeholders::_1),goal_handle}.detach();
         }
         else
@@ -146,7 +151,7 @@ class DroneServer : public rclcpp::Node{
 
         RCLCPP_INFO(this->get_logger(),"Goal receive in takeoff function: %s", goal->drone_state.c_str());
         
-        if(goal->drone_state=="start")
+        if(goal->drone_state=="takeoff")
         {
             sendCmd((char*)"TAKEOFF",0,0,0,0);
             RCLCPP_INFO(this->get_logger(),"Drone taking off");
@@ -195,7 +200,7 @@ class DroneServer : public rclcpp::Node{
         RCLCPP_INFO(this->get_logger(),"Goal receive in landing function: %s", goal->drone_state.c_str());
         
         is_landing_=true;
-        if(goal->drone_state=="stop"){
+        if(goal->drone_state=="land"){
 
             sendCmd((char*)"CONTROL",0,0,0,0);
             std::this_thread::sleep_for(std::chrono::milliseconds(500));

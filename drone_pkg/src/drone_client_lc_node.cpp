@@ -55,7 +55,7 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
         }
 
         drone_actions::action::TakeoffLanding::Goal goal_msg;
-        goal_msg.drone_state = "start";
+        goal_msg.drone_state = "takeoff";
 
         std::thread{std::bind(&DroneClient::send_a_goal,this,std::placeholders::_1),goal_msg}.detach();
 
@@ -98,26 +98,35 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
 
         RCLCPP_INFO(this->get_logger(),"Last state id: %d, label: %s,",state.id(),state.label().c_str());    
 
-        drone_actions::action::TakeoffLanding::Goal goal_stop_msg;
-        goal_stop_msg.drone_state = "stop";  
-
-        std::thread{std::bind(&DroneClient::send_a_goal,this,std::placeholders::_1),goal_stop_msg}.detach();
 
         return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
     }
 
     rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
-    on_cleanup(const rclcpp_lifecycle::State &)
+    on_cleanup(const rclcpp_lifecycle::State &state)
     {
         RCLCPP_INFO(get_logger(),"on_cleanup() called");
+        RCLCPP_INFO(this->get_logger(),"Last state id: %d, label: %s,",state.id(),state.label().c_str());    
+
 
         return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
     }
 
     rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
-    on_shutdown(const rclcpp_lifecycle::State &)
+    on_shutdown(const rclcpp_lifecycle::State &state)
     {
-        RCLCPP_INFO(get_logger(),"on_shutdown() called");
+        while(!drone_client_->wait_for_action_server(std::chrono::seconds(2)))
+        {
+            RCLCPP_WARN(this->get_logger(), "Trying to connect, waiting Drone_Server to be activated");
+        }
+
+        RCLCPP_INFO(get_logger(),"on_deactivate() called");
+        RCLCPP_INFO(this->get_logger(),"Last state id: %d, label: %s,",state.id(),state.label().c_str());    
+
+        drone_actions::action::TakeoffLanding::Goal goal_stop_msg;
+        goal_stop_msg.drone_state = "land";  
+
+        std::thread{std::bind(&DroneClient::send_a_goal,this,std::placeholders::_1),goal_stop_msg}.detach();
 
         return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
     }
@@ -214,19 +223,21 @@ class DroneClient : public rclcpp_lifecycle::LifecycleNode{
 
     void feedback_callback(rclcpp_action::ClientGoalHandle<drone_actions::action::TakeoffLanding>::SharedPtr goal_handle, const std::shared_ptr<const drone_actions::action::TakeoffLanding::Feedback> feedback){
 
-        if((feedback->altitude > 0.5) && (goal_active_)){
+        if((feedback->altitude > 1.5) && (goal_active_)){
             RCLCPP_INFO(this->get_logger(),"Cancel from feedback_callback");
             cancel_goal_th_ = std::thread(&DroneClient::cancel_a_goal,this,goal_handle);
             cancel_goal_th_.detach();
         }
 
-        if(pub<100000){
-            pub++;
-        }
-        else{
-            RCLCPP_INFO(this->get_logger(),"Altitude from feedback: %.5f", feedback->altitude);
-            pub=0;
-        }
+       // if(pub<100000){
+       //     pub++;
+       // }
+       // else{
+       //     RCLCPP_INFO(this->get_logger(),"Altitude from feedback: %.5f", feedback->altitude);
+       //     pub=0;
+       // }
+
+       RCLCPP_INFO(this->get_logger(),"Altitude from feedback: %.5f", feedback->altitude);
     }
 
     void result_callback(const rclcpp_action::ClientGoalHandle<drone_actions::action::TakeoffLanding>::WrappedResult & result){
